@@ -88,8 +88,7 @@ class YouTube:
                 f"Firefox profile path does not exist or is not a directory: {self._fp_profile_path}"
             )
 
-        self.options.add_argument("-profile")
-        self.options.add_argument(self._fp_profile_path)
+        self.options.profile = self._fp_profile_path
 
         # Set the service
         self.service: Service = Service(GeckoDriverManager().install())
@@ -205,13 +204,16 @@ class YouTube:
             metadata (dict): The generated metadata.
         """
         title = self.generate_response(
-            f"Please generate a YouTube Video Title for the following subject, including hashtags: {self.subject}. Only return the title, nothing else. Limit the title under 100 characters."
+            f"Generate a YouTube Short title for: {self.subject}. STRICT rules: under 60 characters, no hashtags, no quotes, return ONLY the title, nothing else."
         )
 
+        # Strip common LLM preamble
+        for prefix in ["Title:", "title:", "**", "*", '"', "'"]:
+            title = title.strip().removeprefix(prefix).strip()
+        title = title.strip('"\'')
+        # Hard truncate as final fallback
         if len(title) > 100:
-            if get_verbose():
-                warning("Generated Title is too long. Retrying...")
-            return self.generate_metadata()
+            title = title[:97] + "..."
 
         description = self.generate_response(
             f"Please generate a YouTube Video Description for the following script: {self.script}. Only return the description, nothing else."
@@ -377,16 +379,47 @@ class YouTube:
                 warning(f"Failed to generate image with Nano Banana 2 API: {str(e)}")
             return None
 
+    def generate_image_pexels(self, prompt: str) -> str:
+        """
+        Fetches a relevant image from Pexels API based on the prompt.
+        """
+        from config import get_pexels_api_key
+        api_key = get_pexels_api_key()
+        if not api_key:
+            error("pexels_api_key is not configured.")
+            return None
+
+        try:
+            headers = {"Authorization": api_key}
+            # Use first 5 words of prompt as search query for best results
+            query = " ".join(prompt.split()[:5])
+            response = requests.get(
+                "https://api.pexels.com/v1/search",
+                headers=headers,
+                params={"query": query, "per_page": 1, "orientation": "portrait"}
+            )
+            data = response.json()
+            photos = data.get("photos", [])
+            if not photos:
+                warning(f"Pexels returned no results for: {query}")
+                return None
+
+            image_url = photos[0]["src"]["portrait"]
+            image_bytes = requests.get(image_url).content
+            return self._persist_image(image_bytes, "Pexels")
+
+        except Exception as e:
+            warning(f"Failed to fetch image from Pexels: {str(e)}")
+            return None
+
     def generate_image(self, prompt: str) -> str:
         """
-        Generates an AI Image based on the given prompt using Nano Banana 2.
-
-        Args:
-            prompt (str): Reference for image generation
-
-        Returns:
-            path (str): The path to the generated image.
+        Generates or fetches an image based on configured image_model.
         """
+        from config import get_image_model
+        model = get_image_model()
+        if model == "pexels":
+            return self.generate_image_pexels(prompt)
         return self.generate_image_nanobanana2(prompt)
 
     def generate_script_to_speech(self, tts_instance: TTS) -> str:
@@ -708,24 +741,42 @@ class YouTube:
             success (bool): Whether the upload was successful or not.
         """
         try:
-            self.get_channel_id()
-
             driver = self.browser
             verbose = get_verbose()
 
+            # Verify logged in before proceeding
+            driver.get("https://studio.youtube.com")
+            time.sleep(4)
+            if "studio.youtube.com" not in driver.current_url:
+                error("Not logged into YouTube. Please log in via the bot Firefox profile first.")
+                return False
+
+            # Extract channel ID from URL
+            self.channel_id = driver.current_url.split("/")[-1]
+            if verbose:
+                info(f"\t=> Channel ID: {self.channel_id}")
+
             # Go to youtube.com/upload
             driver.get("https://www.youtube.com/upload")
+            time.sleep(4)
 
-            # Set video file
+            # Set video file - wait for element to appear
+            from selenium.webdriver.support.ui import WebDriverWait
+            from selenium.webdriver.support import expected_conditions as EC
             FILE_PICKER_TAG = "ytcp-uploads-file-picker"
-            file_picker = driver.find_element(By.TAG_NAME, FILE_PICKER_TAG)
+            try:
+                file_picker = WebDriverWait(driver, 15).until(
+                    EC.presence_of_element_located((By.TAG_NAME, FILE_PICKER_TAG))
+                )
+            except Exception:
+                error("Upload page did not load. Are you logged in?")
+                return False
             INPUT_TAG = "input"
             file_input = file_picker.find_element(By.TAG_NAME, INPUT_TAG)
             file_input.send_keys(self.video_path)
 
-            # Wait for upload to finish
-            time.sleep(5)
-
+            # Wait for upload to start
+            time.sleep(8)
             # Set title
             textboxes = driver.find_elements(By.ID, YOUTUBE_TEXTBOX_ID)
 

@@ -3,6 +3,7 @@ import random
 import zipfile
 import requests
 import platform
+import shutil
 
 from status import *
 from config import *
@@ -44,22 +45,30 @@ def build_url(youtube_video_id: str) -> str:
     """
     return f"https://www.youtube.com/watch?v={youtube_video_id}"
 
-
 def rem_temp_files() -> None:
     """
-    Removes temporary files in the `.mp` directory.
-
-    Returns:
-        None
+    Removes temporary files in the `.mp` directory,
+    but saves .mp4 files to ~/Videos first.
     """
-    # Path to the `.mp` directory
     mp_dir = os.path.join(ROOT_DIR, ".mp")
+    target_dir = os.path.expanduser("~/Videos")
+
+    os.makedirs(target_dir, exist_ok=True)
 
     files = os.listdir(mp_dir)
 
     for file in files:
+        file_path = os.path.join(mp_dir, file)
+
+        # If it's a video, save it first
+        if file.endswith(".mp4"):
+            destination = os.path.join(target_dir, file)
+            shutil.copy2(file_path, destination)
+            print(f"Saved video to: {destination}")
+
+        # Then proceed with deletion (except json)
         if not file.endswith(".json"):
-            os.remove(os.path.join(mp_dir, file))
+            os.remove(file_path)
 
 
 def fetch_songs() -> None:
