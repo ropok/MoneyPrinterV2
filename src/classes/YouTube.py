@@ -22,6 +22,7 @@ from selenium import webdriver
 from moviepy.video.fx.all import crop
 from moviepy.config import change_settings
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.firefox.options import Options
 from moviepy.video.tools.subtitles import SubtitlesClip
@@ -664,7 +665,7 @@ class YouTube:
         random_song_clip = AudioFileClip(random_song).set_fps(44100)
 
         # Turn down volume
-        random_song_clip = random_song_clip.fx(afx.volumex, 0.1)
+        random_song_clip = random_song_clip.fx(afx.volumex, 0.05)
         comp_audio = CompositeAudioClip([tts_clip.set_fps(44100), random_song_clip])
 
         final_clip = final_clip.set_audio(comp_audio)
@@ -777,8 +778,24 @@ class YouTube:
 
             # Wait for upload to start
             time.sleep(8)
-            # Set title
+
+            # Wait for title textbox to appear
+            from selenium.webdriver.support.ui import WebDriverWait
+            from selenium.webdriver.support import expected_conditions as EC
+
+            try:
+                WebDriverWait(driver, 20).until(
+                    EC.presence_of_element_located((By.ID, YOUTUBE_TEXTBOX_ID))
+                )
+            except Exception:
+                error("Timed out waiting for YouTube upload form to load.")
+                return False
+
             textboxes = driver.find_elements(By.ID, YOUTUBE_TEXTBOX_ID)
+
+            if len(textboxes) < 2:
+                error(f"Expected 2+ textboxes, found {len(textboxes)}. Page may not have loaded.")
+                return False
 
             title_el = textboxes[0]
             description_el = textboxes[-1]
@@ -786,9 +803,12 @@ class YouTube:
             if verbose:
                 info("\t=> Setting title...")
 
+            # Clear existing title text properly
             title_el.click()
             time.sleep(1)
-            title_el.clear()
+            title_el.send_keys(Keys.CONTROL + "a")
+            title_el.send_keys(Keys.DELETE)
+            time.sleep(0.5)
             title_el.send_keys(self.metadata["title"])
 
             if verbose:
