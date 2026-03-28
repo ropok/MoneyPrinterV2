@@ -16,6 +16,7 @@ from prettytable import PrettyTable
 from classes.Outreach import Outreach
 from classes.AFM import AffiliateMarketing
 from llm_provider import list_models, select_model, get_active_model
+from InquirerPy import inquirer
 
 def main():
     """Main entry point for the application, providing a menu-driven interface
@@ -160,6 +161,12 @@ def main():
                     tts = TTS()
 
                     if user_input == 1:
+                        custom = inquirer.text(
+                            message="Enter a custom script prompt (or press Enter to auto-generate): ",
+                            multiline=True
+                        ).execute()
+                        # custom = question("Enter a custom script prompt (or press Enter to auto-generate): ").strip()
+                        youtube.custom_prompt = custom
                         youtube.generate_video(tts)
                         upload_to_yt = question("Do you want to upload this video to YouTube? (Yes/No): ")
                         if upload_to_yt.lower() == "yes":

@@ -55,6 +55,7 @@ class YouTube:
         fp_profile_path: str,
         niche: str,
         language: str,
+        custom_prompt: str = "",
     ) -> None:
         """
         Constructor for YouTube Class.
@@ -74,6 +75,7 @@ class YouTube:
         self._fp_profile_path: str = fp_profile_path
         self._niche: str = niche
         self._language: str = language
+        self.custom_prompt: str = custom_prompt
 
         self.images = []
 
@@ -231,7 +233,7 @@ class YouTube:
         Returns:
             image_prompts (List[str]): Generated List of image prompts.
         """
-        n_prompts = len(self.script) / 3
+        n_prompts = min(8, max(5, len(self.script.split('.')) ))
 
         prompt = f"""
         Generate {n_prompts} Image Prompts for AI Image Generation,
@@ -658,7 +660,7 @@ class YouTube:
             subtitles_path = self.generate_subtitles(self.tts_path)
             equalize_subtitles(subtitles_path, 10)
             subtitles = SubtitlesClip(subtitles_path, generator)
-            subtitles.set_pos(("center", "center"))
+            subtitles = subtitles.set_pos(("center", 0.75), relative=True)
         except Exception as e:
             warning(f"Failed to generate subtitles, continuing without subtitles: {e}")
 
@@ -691,7 +693,11 @@ class YouTube:
             path (str): The path to the generated MP4 File.
         """
         # Generate the Topic
-        self.generate_topic()
+        # Allow custom prompt or auto-generate topic
+        if self.custom_prompt:
+            self.subject = self.custom_prompt
+        else:
+            self.generate_topic()
 
         # Generate the Script
         self.generate_script()
