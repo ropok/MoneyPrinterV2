@@ -148,7 +148,6 @@ def main():
                 )
 
                 while True:
-                    rem_temp_files()
                     info("\n============ OPTIONS ============", False)
 
                     for idx, youtube_option in enumerate(YOUTUBE_OPTIONS):
@@ -170,7 +169,9 @@ def main():
                         youtube.generate_video(tts)
                         upload_to_yt = question("Do you want to upload this video to YouTube? (Yes/No): ")
                         if upload_to_yt.lower() == "yes":
-                            youtube.upload_video()
+                            success = youtube.upload_video()
+                            if success:
+                                rem_temp_files()
                     elif user_input == 2:
                         videos = youtube.get_videos()
 
