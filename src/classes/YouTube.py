@@ -655,28 +655,47 @@ class YouTube:
         final_clip = final_clip.set_fps(30)
         random_song = choose_random_song()
 
-        subtitles = None
+        # Generate subtitles SRT first
+        subtitles_path = None
         try:
             subtitles_path = self.generate_subtitles(self.tts_path)
             equalize_subtitles(subtitles_path, 10)
-            subtitles = SubtitlesClip(subtitles_path, generator)
-            subtitles = subtitles.set_pos(("center", 0.75), relative=True)
+            info(" => Subtitles generated successfully")
         except Exception as e:
-            warning(f"Failed to generate subtitles, continuing without subtitles: {e}")
+            import traceback
+            warning(f"Failed to generate subtitles: {e}")
+            traceback.print_exc()
 
+        # Mix audio
         random_song_clip = AudioFileClip(random_song).set_fps(44100)
-
-        # Turn down volume
-        random_song_clip = random_song_clip.fx(afx.volumex, 0.05)
+        random_song_clip = random_song_clip.fx(afx.volumex, 0.02)
         comp_audio = CompositeAudioClip([tts_clip.set_fps(44100), random_song_clip])
-
         final_clip = final_clip.set_audio(comp_audio)
         final_clip = final_clip.set_duration(tts_clip.duration)
 
-        if subtitles is not None:
-            final_clip = CompositeVideoClip([final_clip, subtitles])
-
+        # Write video without subtitles first
         final_clip.write_videofile(combined_image_path, threads=threads)
+
+        # Burn subtitles using FFmpeg (much more reliable than MoviePy TextClip)
+        if subtitles_path and os.path.exists(subtitles_path):
+            try:
+                import subprocess
+                subtitled_path = combined_image_path.replace(".mp4", "_subtitled.mp4")
+                # Style: yellow bold text, black outline, positioned at bottom
+                style = "FontName=Arial,FontSize=18,PrimaryColour=&H00FFFF00,OutlineColour=&H00000000,Outline=2,Bold=1,Alignment=2,MarginV=80"
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-i", combined_image_path,
+                    "-vf", f"subtitles={subtitles_path}:force_style='{style}'",
+                    "-c:a", "copy",
+                    subtitled_path
+                ]
+                subprocess.run(cmd, check=True, capture_output=True)
+                # Replace original with subtitled version
+                os.replace(subtitled_path, combined_image_path)
+                info(" => Burned subtitles into video successfully")
+            except Exception as e:
+                warning(f"Failed to burn subtitles with FFmpeg: {e}")
 
         success(f'Wrote Video to "{combined_image_path}"')
 
