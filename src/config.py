@@ -290,20 +290,65 @@ def get_whisper_compute_type() -> str:
     """
     with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
         return json.load(file).get("whisper_compute_type", "int8")
-    
-def equalize_subtitles(srt_path: str, max_chars: int = 10) -> None:
-    """
-    Equalizes the subtitles in a SRT file.
 
+def equalize_subtitles(srt_path: str, max_words: int = 5) -> None:
+    """
+    Rewrites SRT file grouping words into chunks of max_words per subtitle line.
     Args:
         srt_path (str): The path to the SRT file
-        max_chars (int): The maximum amount of characters in a subtitle
-
+        max_words (int): Maximum words per subtitle line (default 5)
     Returns:
         None
     """
-    srt_equalizer.equalize_srt_file(srt_path, srt_path, max_chars)
-    
+    def parse_time(t: str) -> float:
+        h, m, s = t.strip().split(":")
+        s, ms = s.split(",")
+        return int(h)*3600 + int(m)*60 + int(s) + int(ms)/1000
+
+    def format_time(seconds: float) -> str:
+        h = int(seconds // 3600)
+        m = int((seconds % 3600) // 60)
+        s = int(seconds % 60)
+        ms = int(round((seconds - int(seconds)) * 1000))
+        return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+    with open(srt_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # Parse existing SRT blocks
+    blocks = []
+    for block in content.strip().split("\n\n"):
+        lines = block.strip().split("\n")
+        if len(lines) < 3:
+            continue
+        times = lines[1].split(" --> ")
+        start = parse_time(times[0])
+        end = parse_time(times[1])
+        text = " ".join(lines[2:]).strip()
+        blocks.append((start, end, text))
+
+    # Regroup into max_words chunks
+    new_blocks = []
+    idx = 1
+    for start, end, text in blocks:
+        words = text.split()
+        chunks = [words[i:i+max_words] for i in range(0, len(words), max_words)]
+        if not chunks:
+            continue
+        duration = (end - start) / len(chunks)
+        for i, chunk in enumerate(chunks):
+            chunk_start = start + i * duration
+            chunk_end = chunk_start + duration
+            new_blocks.append((idx, chunk_start, chunk_end, " ".join(chunk)))
+            idx += 1
+
+    # Write back
+    with open(srt_path, "w", encoding="utf-8") as f:
+        for num, start, end, text in new_blocks:
+            f.write(f"{num}\n")
+            f.write(f"{format_time(start)} --> {format_time(end)}\n")
+            f.write(f"{text}\n\n")
+   
 def get_font() -> str:
     """
     Gets the font from the config file.
