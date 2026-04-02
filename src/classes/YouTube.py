@@ -682,7 +682,7 @@ class YouTube:
                 import subprocess
                 subtitled_path = combined_image_path.replace(".mp4", "_subtitled.mp4")
                 # Style: yellow bold text, black outline, positioned at bottom
-                style = "FontName=Arial,FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=1,Shadow=0,Bold=1,Alignment=2,MarginV=120"
+                style = "FontName=Arial,FontSize=20,PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,Outline=1,Shadow=0,Bold=1,Alignment=2,MarginV=120"
                 cmd = [
                     "ffmpeg", "-y",
                     "-i", combined_image_path,
