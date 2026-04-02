@@ -659,7 +659,7 @@ class YouTube:
         subtitles_path = None
         try:
             subtitles_path = self.generate_subtitles(self.tts_path)
-            equalize_subtitles(subtitles_path, 10)
+            equalize_subtitles(subtitles_path, 5)
             info(" => Subtitles generated successfully")
         except Exception as e:
             import traceback
@@ -682,7 +682,7 @@ class YouTube:
                 import subprocess
                 subtitled_path = combined_image_path.replace(".mp4", "_subtitled.mp4")
                 # Style: yellow bold text, black outline, positioned at bottom
-                style = "FontName=Arial,FontSize=18,PrimaryColour=&H00FFFF00,OutlineColour=&H00000000,Outline=2,Bold=1,Alignment=2,MarginV=80"
+                style = "FontName=Arial,FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=1,Shadow=0,Bold=1,Alignment=2,MarginV=120"
                 cmd = [
                     "ffmpeg", "-y",
                     "-i", combined_image_path,
