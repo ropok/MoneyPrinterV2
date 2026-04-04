@@ -425,6 +425,31 @@ class YouTube:
             return self.generate_image_pexels(prompt)
         return self.generate_image_nanobanana2(prompt)
 
+    def generate_subtitles_from_script(self, script: str, audio_duration: float) -> str:
+        """
+        Generates SRT directly from the original script text,
+        preserving math symbols like a² + b² = c².
+        Splits into chunks of ~5 words and distributes timing evenly.
+        """
+        words = script.split()
+        chunk_size = 5
+        chunks = [words[i:i+chunk_size] for i in range(0, len(words), chunk_size)]
+        if not chunks:
+            return None
+
+        duration_per_chunk = audio_duration / len(chunks)
+        srt_path = os.path.join(ROOT_DIR, ".mp", str(uuid4()) + ".srt")
+
+        with open(srt_path, "w", encoding="utf-8") as f:
+            for idx, chunk in enumerate(chunks, start=1):
+                start = (idx - 1) * duration_per_chunk
+                end = idx * duration_per_chunk
+                f.write(f"{idx}\n")
+                f.write(f"{self._format_srt_timestamp(start)} --> {self._format_srt_timestamp(end)}\n")
+                f.write(f"{' '.join(chunk)}\n\n")
+
+        return srt_path
+
     def generate_script_to_speech(self, tts_instance: TTS) -> str:
         """
         Converts the generated script into Speech using KittenTTS and returns the path to the wav file.
@@ -433,15 +458,62 @@ class YouTube:
             tts_instance (tts): Instance of TTS Class.
 
         Returns:
-            path_to_wav (str): Path to generated audio (WAV Format).
+            path_to_wav (str): Path to generated audio (WAV Format).:warning
         """
         path = os.path.join(ROOT_DIR, ".mp", str(uuid4()) + ".wav")
 
         # Clean script, remove every character that is not a word character, a space, a period, a question mark, or an exclamation mark.
-        self.script = re.sub(r"[^\w\s.?!]", "", self.script)
+        def math_to_speech(text: str) -> str:
+            """Convert math notation to speakable words."""
+            replacements = [
+                # Exponents
+                (r'a\^2|a²', 'a squared'),
+                (r'b\^2|b²', 'b squared'),
+                (r'c\^2|c²', 'c squared'),
+                (r'x\^2|x²', 'x squared'),
+                (r'y\^2|y²', 'y squared'),
+                (r'(\w)\^2', r'\1 squared'),
+                (r'(\w)\^3', r'\1 cubed'),
+                (r'(\w)\^(\d+)', r'\1 to the power of \2'),
+                # Operators
+                (r'\+', ' plus '),
+                (r'(?<!=)=(?!=)', ' equals '),
+                (r'!=|≠', ' does not equal '),
+                (r'>=|≥', ' greater than or equal to '),
+                (r'<=|≤', ' less than or equal to '),
+                (r'(?<![<>])>(?![=])', ' greater than '),
+                (r'(?<![<>])<(?![=])', ' less than '),
+                (r'×|∗', ' times '),
+                (r'÷', ' divided by '),
+                (r'√', ' square root of '),
+                (r'π', ' pi '),
+                (r'∞', ' infinity '),
+                (r'°', ' degrees '),
+                # Fractions
+                (r'1/2', 'one half'),
+                (r'1/3', 'one third'),
+                (r'1/4', 'one quarter'),
+                (r'(\d+)/(\d+)', r'\1 over \2'),
+                # Superscripts
+                (r'²', ' squared'),
+                (r'³', ' cubed'),
+                # Clean up multiple spaces
+                (r' +', ' '),
+            ]
+            import re as _re
+            for pattern, replacement in replacements:
+                text = _re.sub(pattern, replacement, text, flags=_re.IGNORECASE)
+            return text.strip()
 
-        tts_instance.synthesize(self.script, path)
+        # Save original script for subtitles (keeps math symbols)
+        self.subtitle_script = self.script
 
+        # Convert math notation to speakable words (for TTS only)
+        spoken_script = math_to_speech(self.script)
+        # Clean spoken script for TTS
+        spoken_script = re.sub(r"[^\w\s.?!,']", "", spoken_script)
+        tts_instance.synthesize(spoken_script, path)
+        
         self.tts_path = path
 
         if get_verbose():
@@ -658,8 +730,12 @@ class YouTube:
         # Generate subtitles SRT first
         subtitles_path = None
         try:
-            subtitles_path = self.generate_subtitles(self.tts_path)
-            equalize_subtitles(subtitles_path, 5)
+            # Use original script for subtitles to preserve math symbols
+            subtitle_text = getattr(self, 'subtitle_script', self.script)
+            subtitles_path = self.generate_subtitles_from_script(
+                subtitle_text,
+                tts_clip.duration
+            )
             info(" => Subtitles generated successfully")
         except Exception as e:
             import traceback
@@ -683,13 +759,30 @@ class YouTube:
                 subtitled_path = combined_image_path.replace(".mp4", "_subtitled.mp4")
                 # Style: yellow bold text, black outline, positioned at bottom
                 style = "FontName=Arial,FontSize=20,PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,Outline=1,Shadow=0,Bold=1,Alignment=2,MarginV=120"
+                # Convert SRT to ASS for better Unicode/math symbol support
+                ass_path = subtitles_path.replace(".srt", ".ass")
+                subprocess.run([
+                    "ffmpeg", "-y", "-i", subtitles_path, ass_path
+                ], check=True, capture_output=True)
+
+                # Edit ASS to set font that supports math symbols
+                with open(ass_path, "r", encoding="utf-8") as f:
+                    ass_content = f.read()
+                ass_content = ass_content.replace(
+                    "Style: Default",
+                    "Style: Default,Arial Unicode MS,20,&H0000FFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,1,0,2,10,10,120,1"
+                )
+                with open(ass_path, "w", encoding="utf-8") as f:
+                    f.write(ass_content)
+
                 cmd = [
                     "ffmpeg", "-y",
                     "-i", combined_image_path,
-                    "-vf", f"subtitles={subtitles_path}:force_style='{style}'",
+                    "-vf", f"ass={ass_path}",
                     "-c:a", "copy",
                     subtitled_path
                 ]
+            
                 subprocess.run(cmd, check=True, capture_output=True)
                 # Replace original with subtitled version
                 os.replace(subtitled_path, combined_image_path)
