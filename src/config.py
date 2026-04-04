@@ -392,3 +392,7 @@ def get_script_sentence_length() -> int:
             return config_json["script_sentence_length"]
         else:
             return 4
+
+def get_subtitle_max_words() -> int:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+        return json.load(file).get("subtitle_max_words", 5)

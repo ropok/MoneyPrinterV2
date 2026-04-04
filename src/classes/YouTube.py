@@ -175,6 +175,7 @@ class YouTube:
         
         YOU MUST NOT EXCEED THE {sentence_length} SENTENCES LIMIT. MAKE SURE THE {sentence_length} SENTENCES ARE SHORT.
         YOU MUST NOT INCLUDE ANY TYPE OF MARKDOWN OR FORMATTING IN THE SCRIPT, NEVER USE A TITLE.
+        WHEN MENTIONING MATH FORMULAS, ALWAYS USE PROPER MATH SYMBOLS (e.g. a² + b² = c², π, √, ×, ÷) NOT WORDS. The math_to_speech system will convert symbols to spoken words automatically.
         YOU MUST WRITE THE SCRIPT IN THE LANGUAGE SPECIFIED IN [LANGUAGE].
         ONLY RETURN THE RAW CONTENT OF THE SCRIPT. DO NOT INCLUDE "VOICEOVER", "NARRATOR" OR SIMILAR INDICATORS OF WHAT SHOULD BE SPOKEN AT THE BEGINNING OF EACH PARAGRAPH OR LINE. YOU MUST NOT MENTION THE PROMPT, OR ANYTHING ABOUT THE SCRIPT ITSELF. ALSO, NEVER TALK ABOUT THE AMOUNT OF PARAGRAPHS OR LINES. JUST WRITE THE SCRIPT
         
@@ -432,7 +433,8 @@ class YouTube:
         Splits into chunks of ~5 words and distributes timing evenly.
         """
         words = script.split()
-        chunk_size = 5
+        from config import get_subtitle_max_words
+        chunk_size = get_subtitle_max_words()
         chunks = [words[i:i+chunk_size] for i in range(0, len(words), chunk_size)]
         if not chunks:
             return None
