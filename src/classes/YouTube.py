@@ -416,14 +416,142 @@ class YouTube:
             warning(f"Failed to fetch image from Pexels: {str(e)}")
             return None
 
+    def generate_image_minimax(self, prompt: str) -> str:
+        """
+        Generates an AI image using MiniMax image-01 API.
+        """
+        import base64
+        from config import get_minimax_api_key
+
+        api_key = get_minimax_api_key()
+        if not api_key:
+            error("minimax_api_key is not configured.")
+            return None
+
+        try:
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": "image-01",
+                "prompt": prompt,
+                "aspect_ratio": "9:16",  # Portrait for Shorts
+                "response_format": "base64",
+            }
+            response = requests.post(
+                "https://api.minimax.io/v1/image_generation",
+                headers=headers,
+                json=payload
+            )
+            response.raise_for_status()
+            images = response.json()["data"]["image_base64"]
+            if not images:
+                warning(f"MiniMax returned no images for: {prompt[:50]}")
+                return None
+
+            image_bytes = base64.b64decode(images[0])
+            return self._persist_image(image_bytes, "MiniMax image-01")
+
+        except Exception as e:
+            warning(f"Failed to generate image with MiniMax: {str(e)}")
+            return None
+
+    def generate_image_flux(self, prompt: str) -> str:
+        """
+        Generates an image locally using FLUX.1-schnell.
+        Temporarily unloads Ollama to free VRAM.
+        """
+        try:
+            import torch
+            import requests as _req
+            from diffusers import FluxPipeline
+
+            print(f"Generating image with FLUX.1 Schnell: {prompt[:60]}...")
+
+            # Force unload Ollama model from VRAM
+            try:
+                from config import get_ollama_model
+                ollama_model = get_ollama_model() or "llama3.1:8b"
+                # keep_alive=0 forces immediate unload
+                _req.post(
+                    "http://localhost:11434/api/generate",
+                    json={
+                        "model": ollama_model,
+                        "prompt": "",
+                        "keep_alive": 0
+                    },
+                    timeout=15
+                )
+                import time as _time
+                _time.sleep(3)  # Give Ollama time to release VRAM
+                if get_verbose():
+                    info(" => Unloaded Ollama from VRAM")
+            except Exception as _e:
+                warning(f"Could not unload Ollama: {_e}")
+
+            torch.cuda.empty_cache()
+            import gc
+            gc.collect()
+            torch.cuda.empty_cache()
+
+            # Verify free VRAM
+            free = torch.cuda.mem_get_info()[0] / 1024**3
+            if get_verbose():
+                info(f" => Free VRAM before FLUX: {free:.1f}GB")
+
+            if not hasattr(self, '_flux_pipe') or self._flux_pipe is None:
+                self._flux_pipe = FluxPipeline.from_pretrained(
+                    "black-forest-labs/FLUX.1-schnell",
+                    torch_dtype=torch.bfloat16,
+                )
+                # Sequential offload is more stable than model offload
+                # for mixed CPU/GPU setups
+                self._flux_pipe.enable_sequential_cpu_offload()
+                self._flux_pipe.enable_attention_slicing(1)
+                self._flux_pipe.enable_vae_slicing()
+                self._flux_pipe.vae.enable_tiling()
+
+            image = self._flux_pipe(
+                prompt=prompt,
+                height=768,
+                width=432,
+                num_inference_steps=4,
+                guidance_scale=0.0,
+            ).images[0]
+
+            image_path = os.path.join(ROOT_DIR, ".mp", str(uuid4()) + ".png")
+            image.save(image_path)
+            self.images.append(image_path)
+
+            if get_verbose():
+                info(f' => Generated FLUX image: "{image_path}"')
+
+            return image_path
+
+        except Exception as e:
+            warning(f"Failed to generate image with FLUX: {str(e)}")
+            return None
+
+    def _unload_flux(self):
+        """Free VRAM after all images are generated so Ollama can reload."""
+        if hasattr(self, '_flux_pipe') and self._flux_pipe is not None:
+            import torch
+            del self._flux_pipe
+            self._flux_pipe = None
+            torch.cuda.empty_cache()
+            if get_verbose():
+                info(" => Unloaded FLUX from VRAM")
+
     def generate_image(self, prompt: str) -> str:
-        """
-        Generates or fetches an image based on configured image_model.
-        """
         from config import get_image_model
         model = get_image_model()
         if model == "pexels":
             return self.generate_image_pexels(prompt)
+        elif model == "minimax":
+            return self.generate_image_minimax(prompt)
+        elif model == "flux":
+            return self.generate_image_flux(prompt)
         return self.generate_image_nanobanana2(prompt)
 
     def generate_subtitles_from_script(self, script: str, audio_duration: float) -> str:
@@ -825,6 +953,9 @@ class YouTube:
         # Generate the Images
         for prompt in self.image_prompts:
             self.generate_image(prompt)
+
+        # Free FLUX from VRAM so Ollama can use GPU again
+        self._unload_flux()
 
         # Generate the TTS
         self.generate_script_to_speech(tts_instance)
