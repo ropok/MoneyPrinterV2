@@ -234,7 +234,11 @@ class YouTube:
         Returns:
             image_prompts (List[str]): Generated List of image prompts.
         """
-        n_prompts = min(8, max(5, len(self.script.split('.')) ))
+        from config import get_image_max
+        from config import get_image_min
+        image_max = get_image_max()
+        image_min = get_image_min()
+        n_prompts = min(image_max, max(image_min, len(self.script.split('.')) ))
 
         prompt = f"""
         Generate {n_prompts} Image Prompts for AI Image Generation,

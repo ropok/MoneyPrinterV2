@@ -396,3 +396,10 @@ def get_script_sentence_length() -> int:
 def get_subtitle_max_words() -> int:
     with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
         return json.load(file).get("subtitle_max_words", 5)
+def get_image_max() -> int:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+        return json.load(file).get("image_max", 3)
+
+def get_image_min() -> int:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+        return json.load(file).get("image_min", 1)
