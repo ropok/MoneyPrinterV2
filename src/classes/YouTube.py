@@ -1114,13 +1114,13 @@ class YouTube:
             next_button = driver.find_element(By.ID, YOUTUBE_NEXT_BUTTON_ID)
             next_button.click()
 
-            # Set as unlisted
-            if verbose:
-                info("\t=> Setting as unlisted...")
-
-            radio_button = driver.find_elements(By.XPATH, YOUTUBE_RADIO_BUTTON_XPATH)
-            radio_button[2].click()
-
+            # # Set as unlisted
+            # if verbose:
+            #     info("\t=> Setting as unlisted...")
+            #
+            # radio_button = driver.find_elements(By.XPATH, YOUTUBE_RADIO_BUTTON_XPATH)
+            # radio_button[2].click()
+            #
             if verbose:
                 info("\t=> Clicking done button...")
 
