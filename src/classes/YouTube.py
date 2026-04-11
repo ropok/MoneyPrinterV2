@@ -88,7 +88,9 @@ class YouTube:
 
         if not os.path.isdir(self._fp_profile_path):
             raise ValueError(
-                f"Firefox profile path does not exist or is not a directory: {self._fp_profile_path}"
+                f"Firefox profile path does not exist or is not a directory: {
+                    self._fp_profile_path
+                }"
             )
 
         self.options.profile = self._fp_profile_path
@@ -141,7 +143,9 @@ class YouTube:
             topic (str): The generated topic.
         """
         completion = self.generate_response(
-            f"Please generate a specific video idea that takes about the following topic: {self.niche}. Make it exactly one sentence. Only return the topic, nothing else."
+            f"Please generate a specific video idea that takes about the following topic: {
+                self.niche
+            }. Make it exactly one sentence. Only return the topic, nothing else."
         )
 
         if not completion:
@@ -172,13 +176,13 @@ class YouTube:
         Get straight to the point, don't start with unnecessary things like, "welcome to this video".
 
         Obviously, the script should be related to the subject of the video.
-        
+
         YOU MUST NOT EXCEED THE {sentence_length} SENTENCES LIMIT. MAKE SURE THE {sentence_length} SENTENCES ARE SHORT.
         YOU MUST NOT INCLUDE ANY TYPE OF MARKDOWN OR FORMATTING IN THE SCRIPT, NEVER USE A TITLE.
         WHEN MENTIONING MATH FORMULAS, ALWAYS USE PROPER MATH SYMBOLS (e.g. a² + b² = c², π, √, ×, ÷) NOT WORDS. The math_to_speech system will convert symbols to spoken words automatically.
         YOU MUST WRITE THE SCRIPT IN THE LANGUAGE SPECIFIED IN [LANGUAGE].
         ONLY RETURN THE RAW CONTENT OF THE SCRIPT. DO NOT INCLUDE "VOICEOVER", "NARRATOR" OR SIMILAR INDICATORS OF WHAT SHOULD BE SPOKEN AT THE BEGINNING OF EACH PARAGRAPH OR LINE. YOU MUST NOT MENTION THE PROMPT, OR ANYTHING ABOUT THE SCRIPT ITSELF. ALSO, NEVER TALK ABOUT THE AMOUNT OF PARAGRAPHS OR LINES. JUST WRITE THE SCRIPT
-        
+
         Subject: {self.subject}
         Language: {self.language}
         """
@@ -208,19 +212,23 @@ class YouTube:
             metadata (dict): The generated metadata.
         """
         title = self.generate_response(
-            f"Generate a YouTube Short title for: {self.subject}. STRICT rules: under 60 characters, no hashtags, no quotes, return ONLY the title, nothing else."
+            f"Generate a YouTube Short title for: {
+                self.subject
+            }. STRICT rules: under 60 characters, no hashtags, no quotes, return ONLY the title, nothing else."
         )
 
         # Strip common LLM preamble
         for prefix in ["Title:", "title:", "**", "*", '"', "'"]:
             title = title.strip().removeprefix(prefix).strip()
-        title = title.strip('"\'')
+        title = title.strip("\"'")
         # Hard truncate as final fallback
         if len(title) > 100:
             title = title[:97] + "..."
 
         description = self.generate_response(
-            f"Please generate a YouTube Video Description for the following script: {self.script}. Only return the description, nothing else."
+            f"Please generate a YouTube Video Description for the following script: {
+                self.script
+            }. Only return the description, nothing else."
         )
 
         self.metadata = {"title": title, "description": description}
@@ -234,7 +242,7 @@ class YouTube:
         Returns:
             image_prompts (List[str]): Generated List of image prompts.
         """
-        n_prompts = min(8, max(5, len(self.script.split('.')) ))
+        n_prompts = min(8, max(5, len(self.script.split("."))))
 
         prompt = f"""
         Generate {n_prompts} Image Prompts for AI Image Generation,
@@ -370,13 +378,17 @@ class YouTube:
                     if not inline_data:
                         continue
                     data = inline_data.get("data")
-                    mime_type = inline_data.get("mimeType") or inline_data.get("mime_type", "")
+                    mime_type = inline_data.get("mimeType") or inline_data.get(
+                        "mime_type", ""
+                    )
                     if data and str(mime_type).startswith("image/"):
                         image_bytes = base64.b64decode(data)
                         return self._persist_image(image_bytes, "Nano Banana 2 API")
 
             if get_verbose():
-                warning(f"Nano Banana 2 did not return an image payload. Response: {body}")
+                warning(
+                    f"Nano Banana 2 did not return an image payload. Response: {body}"
+                )
             return None
         except Exception as e:
             if get_verbose():
@@ -388,6 +400,7 @@ class YouTube:
         Fetches a relevant image from Pexels API based on the prompt.
         """
         from config import get_pexels_api_key
+
         api_key = get_pexels_api_key()
         if not api_key:
             error("pexels_api_key is not configured.")
@@ -400,7 +413,7 @@ class YouTube:
             response = requests.get(
                 "https://api.pexels.com/v1/search",
                 headers=headers,
-                params={"query": query, "per_page": 1, "orientation": "portrait"}
+                params={"query": query, "per_page": 1, "orientation": "portrait"},
             )
             data = response.json()
             photos = data.get("photos", [])
@@ -431,7 +444,7 @@ class YouTube:
         try:
             headers = {
                 "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
             }
             payload = {
                 "model": "image-01",
@@ -442,7 +455,7 @@ class YouTube:
             response = requests.post(
                 "https://api.minimax.io/v1/image_generation",
                 headers=headers,
-                json=payload
+                json=payload,
             )
             response.raise_for_status()
             images = response.json()["data"]["image_base64"]
@@ -472,18 +485,16 @@ class YouTube:
             # Force unload Ollama model from VRAM
             try:
                 from config import get_ollama_model
+
                 ollama_model = get_ollama_model() or "llama3.1:8b"
                 # keep_alive=0 forces immediate unload
                 _req.post(
                     "http://localhost:11434/api/generate",
-                    json={
-                        "model": ollama_model,
-                        "prompt": "",
-                        "keep_alive": 0
-                    },
-                    timeout=15
+                    json={"model": ollama_model, "prompt": "", "keep_alive": 0},
+                    timeout=15,
                 )
                 import time as _time
+
                 _time.sleep(3)  # Give Ollama time to release VRAM
                 if get_verbose():
                     info(" => Unloaded Ollama from VRAM")
@@ -492,6 +503,7 @@ class YouTube:
 
             torch.cuda.empty_cache()
             import gc
+
             gc.collect()
             torch.cuda.empty_cache()
 
@@ -500,7 +512,7 @@ class YouTube:
             if get_verbose():
                 info(f" => Free VRAM before FLUX: {free:.1f}GB")
 
-            if not hasattr(self, '_flux_pipe') or self._flux_pipe is None:
+            if not hasattr(self, "_flux_pipe") or self._flux_pipe is None:
                 self._flux_pipe = FluxPipeline.from_pretrained(
                     "black-forest-labs/FLUX.1-schnell",
                     torch_dtype=torch.bfloat16,
@@ -535,8 +547,9 @@ class YouTube:
 
     def _unload_flux(self):
         """Free VRAM after all images are generated so Ollama can reload."""
-        if hasattr(self, '_flux_pipe') and self._flux_pipe is not None:
+        if hasattr(self, "_flux_pipe") and self._flux_pipe is not None:
             import torch
+
             del self._flux_pipe
             self._flux_pipe = None
             torch.cuda.empty_cache()
@@ -545,6 +558,7 @@ class YouTube:
 
     def generate_image(self, prompt: str) -> str:
         from config import get_image_model
+
         model = get_image_model()
         if model == "pexels":
             return self.generate_image_pexels(prompt)
@@ -562,8 +576,9 @@ class YouTube:
         """
         words = script.split()
         from config import get_subtitle_max_words
+
         chunk_size = get_subtitle_max_words()
-        chunks = [words[i:i+chunk_size] for i in range(0, len(words), chunk_size)]
+        chunks = [words[i : i + chunk_size] for i in range(0, len(words), chunk_size)]
         if not chunks:
             return None
 
@@ -575,7 +590,11 @@ class YouTube:
                 start = (idx - 1) * duration_per_chunk
                 end = idx * duration_per_chunk
                 f.write(f"{idx}\n")
-                f.write(f"{self._format_srt_timestamp(start)} --> {self._format_srt_timestamp(end)}\n")
+                f.write(
+                    f"{self._format_srt_timestamp(start)} --> {
+                        self._format_srt_timestamp(end)
+                    }\n"
+                )
                 f.write(f"{' '.join(chunk)}\n\n")
 
         return srt_path
@@ -597,40 +616,41 @@ class YouTube:
             """Convert math notation to speakable words."""
             replacements = [
                 # Exponents
-                (r'a\^2|a²', 'a squared'),
-                (r'b\^2|b²', 'b squared'),
-                (r'c\^2|c²', 'c squared'),
-                (r'x\^2|x²', 'x squared'),
-                (r'y\^2|y²', 'y squared'),
-                (r'(\w)\^2', r'\1 squared'),
-                (r'(\w)\^3', r'\1 cubed'),
-                (r'(\w)\^(\d+)', r'\1 to the power of \2'),
+                (r"a\^2|a²", "a squared"),
+                (r"b\^2|b²", "b squared"),
+                (r"c\^2|c²", "c squared"),
+                (r"x\^2|x²", "x squared"),
+                (r"y\^2|y²", "y squared"),
+                (r"(\w)\^2", r"\1 squared"),
+                (r"(\w)\^3", r"\1 cubed"),
+                (r"(\w)\^(\d+)", r"\1 to the power of \2"),
                 # Operators
-                (r'\+', ' plus '),
-                (r'(?<!=)=(?!=)', ' equals '),
-                (r'!=|≠', ' does not equal '),
-                (r'>=|≥', ' greater than or equal to '),
-                (r'<=|≤', ' less than or equal to '),
-                (r'(?<![<>])>(?![=])', ' greater than '),
-                (r'(?<![<>])<(?![=])', ' less than '),
-                (r'×|∗', ' times '),
-                (r'÷', ' divided by '),
-                (r'√', ' square root of '),
-                (r'π', ' pi '),
-                (r'∞', ' infinity '),
-                (r'°', ' degrees '),
+                (r"\+", " plus "),
+                (r"(?<!=)=(?!=)", " equals "),
+                (r"!=|≠", " does not equal "),
+                (r">=|≥", " greater than or equal to "),
+                (r"<=|≤", " less than or equal to "),
+                (r"(?<![<>])>(?![=])", " greater than "),
+                (r"(?<![<>])<(?![=])", " less than "),
+                (r"×|∗", " times "),
+                (r"÷", " divided by "),
+                (r"√", " square root of "),
+                (r"π", " pi "),
+                (r"∞", " infinity "),
+                (r"°", " degrees "),
                 # Fractions
-                (r'1/2', 'one half'),
-                (r'1/3', 'one third'),
-                (r'1/4', 'one quarter'),
-                (r'(\d+)/(\d+)', r'\1 over \2'),
+                (r"1/2", "one half"),
+                (r"1/3", "one third"),
+                (r"1/4", "one quarter"),
+                (r"(\d+)/(\d+)", r"\1 over \2"),
                 # Superscripts
-                (r'²', ' squared'),
-                (r'³', ' cubed'),
+                (r"²", " squared"),
+                (r"³", " cubed"),
                 # Clean up multiple spaces
-                (r' +', ' '),
+                (r" +", " "),
             ]
             import re as _re
+
             for pattern, replacement in replacements:
                 text = _re.sub(pattern, replacement, text, flags=_re.IGNORECASE)
             return text.strip()
@@ -643,7 +663,7 @@ class YouTube:
         # Clean spoken script for TTS
         spoken_script = re.sub(r"[^\w\s.?!,']", "", spoken_script)
         tts_instance.synthesize(spoken_script, path)
-        
+
         self.tts_path = path
 
         if get_verbose():
@@ -801,16 +821,17 @@ class YouTube:
         req_dur = max_duration / len(self.images)
 
         # Make a generator that returns a TextClip when called with consecutive
-        generator = lambda txt: TextClip(
-            txt,
-            font=os.path.join(get_fonts_dir(), get_font()),
-            fontsize=100,
-            color="#FFFF00",
-            stroke_color="black",
-            stroke_width=5,
-            size=(1080, 1920),
-            method="caption",
-        )
+        def generator(txt):
+            return TextClip(
+                txt,
+                font=os.path.join(get_fonts_dir(), get_font()),
+                fontsize=100,
+                color="#FFFF00",
+                stroke_color="black",
+                stroke_width=5,
+                size=(1080, 1920),
+                method="caption",
+            )
 
         print(colored("[+] Combining images...", "blue"))
 
@@ -861,14 +882,14 @@ class YouTube:
         subtitles_path = None
         try:
             # Use original script for subtitles to preserve math symbols
-            subtitle_text = getattr(self, 'subtitle_script', self.script)
+            subtitle_text = getattr(self, "subtitle_script", self.script)
             subtitles_path = self.generate_subtitles_from_script(
-                subtitle_text,
-                tts_clip.duration
+                subtitle_text, tts_clip.duration
             )
             info(" => Subtitles generated successfully")
         except Exception as e:
             import traceback
+
             warning(f"Failed to generate subtitles: {e}")
             traceback.print_exc()
 
@@ -886,33 +907,40 @@ class YouTube:
         if subtitles_path and os.path.exists(subtitles_path):
             try:
                 import subprocess
+
                 subtitled_path = combined_image_path.replace(".mp4", "_subtitled.mp4")
                 # Style: yellow bold text, black outline, positioned at bottom
                 style = "FontName=Arial,FontSize=20,PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,Outline=1,Shadow=0,Bold=1,Alignment=2,MarginV=120"
                 # Convert SRT to ASS for better Unicode/math symbol support
                 ass_path = subtitles_path.replace(".srt", ".ass")
-                subprocess.run([
-                    "ffmpeg", "-y", "-i", subtitles_path, ass_path
-                ], check=True, capture_output=True)
+                subprocess.run(
+                    ["ffmpeg", "-y", "-i", subtitles_path, ass_path],
+                    check=True,
+                    capture_output=True,
+                )
 
                 # Edit ASS to set font that supports math symbols
                 with open(ass_path, "r", encoding="utf-8") as f:
                     ass_content = f.read()
                 ass_content = ass_content.replace(
                     "Style: Default",
-                    "Style: Default,Arial Unicode MS,20,&H0000FFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,1,0,2,10,10,120,1"
+                    "Style: Default,Arial Unicode MS,20,&H0000FFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,1,0,2,10,10,120,1",
                 )
                 with open(ass_path, "w", encoding="utf-8") as f:
                     f.write(ass_content)
 
                 cmd = [
-                    "ffmpeg", "-y",
-                    "-i", combined_image_path,
-                    "-vf", f"ass={ass_path}",
-                    "-c:a", "copy",
-                    subtitled_path
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    combined_image_path,
+                    "-vf",
+                    f"ass={ass_path}",
+                    "-c:a",
+                    "copy",
+                    subtitled_path,
                 ]
-            
+
                 subprocess.run(cmd, check=True, capture_output=True)
                 # Replace original with subtitled version
                 os.replace(subtitled_path, combined_image_path)
@@ -1000,7 +1028,9 @@ class YouTube:
             driver.get("https://studio.youtube.com")
             time.sleep(4)
             if "studio.youtube.com" not in driver.current_url:
-                error("Not logged into YouTube. Please log in via the bot Firefox profile first.")
+                error(
+                    "Not logged into YouTube. Please log in via the bot Firefox profile first."
+                )
                 return False
 
             # Extract channel ID from URL
@@ -1015,6 +1045,7 @@ class YouTube:
             # Set video file - wait for element to appear
             from selenium.webdriver.support.ui import WebDriverWait
             from selenium.webdriver.support import expected_conditions as EC
+
             FILE_PICKER_TAG = "ytcp-uploads-file-picker"
             try:
                 file_picker = WebDriverWait(driver, 15).until(
@@ -1045,7 +1076,9 @@ class YouTube:
             textboxes = driver.find_elements(By.ID, YOUTUBE_TEXTBOX_ID)
 
             if len(textboxes) < 2:
-                error(f"Expected 2+ textboxes, found {len(textboxes)}. Page may not have loaded.")
+                error(
+                    f"Expected 2+ textboxes, found {len(textboxes)}. Page may not have loaded."
+                )
                 return False
 
             title_el = textboxes[0]
@@ -1114,13 +1147,13 @@ class YouTube:
             next_button = driver.find_element(By.ID, YOUTUBE_NEXT_BUTTON_ID)
             next_button.click()
 
-            # Set as unlisted
-            if verbose:
-                info("\t=> Setting as unlisted...")
-
-            radio_button = driver.find_elements(By.XPATH, YOUTUBE_RADIO_BUTTON_XPATH)
-            radio_button[2].click()
-
+            # # Set as unlisted
+            # if verbose:
+            #     info("\t=> Setting as unlisted...")
+            #
+            # radio_button = driver.find_elements(By.XPATH, YOUTUBE_RADIO_BUTTON_XPATH)
+            # radio_button[2].click()
+            #
             if verbose:
                 info("\t=> Clicking done button...")
 
