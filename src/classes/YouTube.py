@@ -524,8 +524,13 @@ class YouTube:
                 self._flux_pipe.enable_vae_slicing()
                 self._flux_pipe.vae.enable_tiling()
 
+            from config import get_image_style, get_image_negative_prompt
+
+            negative = get_image_negative_prompt()
+
             image = self._flux_pipe(
-                prompt=prompt,
+                prompt=styled_prompt,
+                negative_prompt=negative if negative else None,
                 height=768,
                 width=432,
                 num_inference_steps=4,
@@ -557,16 +562,21 @@ class YouTube:
                 info(" => Unloaded FLUX from VRAM")
 
     def generate_image(self, prompt: str) -> str:
-        from config import get_image_model
+        from config import get_image_model, get_image_style, get_image_negative_prompt
 
         model = get_image_model()
+
+        # Append consistent style suffix
+        style = get_image_style()
+        styled_prompt = f"{prompt}, {style}" if style else prompt
+
         if model == "pexels":
-            return self.generate_image_pexels(prompt)
+            return self.generate_image_pexels(styled_prompt)
         elif model == "minimax":
-            return self.generate_image_minimax(prompt)
+            return self.generate_image_minimax(styled_prompt)
         elif model == "flux":
-            return self.generate_image_flux(prompt)
-        return self.generate_image_nanobanana2(prompt)
+            return self.generate_image_flux(styled_prompt)
+        return self.generate_image_nanobanana2(styled_prompt)
 
     def generate_subtitles_from_script(self, script: str, audio_duration: float) -> str:
         """
@@ -1077,7 +1087,9 @@ class YouTube:
 
             if len(textboxes) < 2:
                 error(
-                    f"Expected 2+ textboxes, found {len(textboxes)}. Page may not have loaded."
+                    f"Expected 2+ textboxes, found {
+                        len(textboxes)
+                    }. Page may not have loaded."
                 )
                 return False
 
