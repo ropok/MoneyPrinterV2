@@ -136,59 +136,45 @@ class YouTube:
         return generate_text(prompt, model_name=model_name)
 
     def generate_topic(self) -> str:
-        """
-        Generates a topic based on the YouTube Channel niche.
-
-        Returns:
-            topic (str): The generated topic.
-        """
         completion = self.generate_response(
-            f"Please generate a specific video idea that takes about the following topic: {
-                self.niche
-            }. Make it exactly one sentence. Only return the topic, nothing else."
+            f"""Generate a specific math concept for a YouTube Shorts video about: {self.niche}
+            Format: "[Math Concept] using [Everyday Analogy]"
+            Example: "Compound Interest using a Snowball rolling downhill"
+            Return ONLY the topic, nothing else. One sentence."""
         )
-
-        if not completion:
-            error("Failed to generate Topic.")
-
         self.subject = completion
-
         return completion
 
     def generate_script(self) -> str:
-        """
-        Generate a script for a video, depending on the subject of the video, the number of paragraphs, and the AI model.
-
-        Returns:
-            script (str): The script of the video.
-        """
-        sentence_length = get_script_sentence_length()
         prompt = f"""
-        Generate a script for a video in {sentence_length} sentences, depending on the subject of the video.
+        You are a writer for a viral YouTube Shorts math education channel.
 
-        The script is to be returned as a string with the specified number of paragraphs.
+        Explain the mathematical concept in the subject below by using a highly
+        relatable, everyday analogy that anyone can understand.
 
-        Here is an example of a string:
-        "This is an example string."
+        Write a 1-minute video script (max 150 words for audio).
+        Do not use complex jargon. Be conversational and enthusiastic.
 
-        Do not under any circumstance reference this prompt in your response.
+        Return the script in this EXACT format with two columns separated by | :
 
-        Get straight to the point, don't start with unnecessary things like, "welcome to this video".
+        AUDIO | VISUAL
+        [voiceover line 1] | [on-screen text or animation description 1]
+        [voiceover line 2] | [on-screen text or animation description 2]
+        [voiceover line 3] | [on-screen text or animation description 3]
 
-        Obviously, the script should be related to the subject of the video.
-
-        YOU MUST NOT EXCEED THE {sentence_length} SENTENCES LIMIT. MAKE SURE THE {sentence_length} SENTENCES ARE SHORT.
-        YOU MUST NOT INCLUDE ANY TYPE OF MARKDOWN OR FORMATTING IN THE SCRIPT, NEVER USE A TITLE.
-        WHEN MENTIONING MATH FORMULAS, ALWAYS USE PROPER MATH SYMBOLS (e.g. a² + b² = c², π, √, ×, ÷) NOT WORDS. The math_to_speech system will convert symbols to spoken words automatically.
-        YOU MUST WRITE THE SCRIPT IN THE LANGUAGE SPECIFIED IN [LANGUAGE].
-        ONLY RETURN THE RAW CONTENT OF THE SCRIPT. DO NOT INCLUDE "VOICEOVER", "NARRATOR" OR SIMILAR INDICATORS OF WHAT SHOULD BE SPOKEN AT THE BEGINNING OF EACH PARAGRAPH OR LINE. YOU MUST NOT MENTION THE PROMPT, OR ANYTHING ABOUT THE SCRIPT ITSELF. ALSO, NEVER TALK ABOUT THE AMOUNT OF PARAGRAPHS OR LINES. JUST WRITE THE SCRIPT
+        Rules:
+        - AUDIO: Conversational, enthusiastic, no jargon, max 150 words total
+        - VISUAL: Simple doodle descriptions matching the audio exactly
+        - Math must be 100% accurate
+        - Use everyday analogies (pizza, cars, money, sports, etc.)
+        - End with a hook CTA like "Follow for more math secrets!"
+        - Return ONLY the table, no preamble, no markdown, no extra text
 
         Subject: {self.subject}
         Language: {self.language}
         """
-        completion = self.generate_response(prompt)
 
-        # Apply regex to remove *
+        completion = self.generate_response(prompt)
         completion = re.sub(r"\*", "", completion)
 
         if not completion:
@@ -200,9 +186,45 @@ class YouTube:
                 warning("Generated Script is too long. Retrying...")
             return self.generate_script()
 
-        self.script = completion
+        self.raw_script = completion  # Save full two-column version
+
+        # Extract AUDIO column only for TTS
+        self.script = self._extract_audio_column(completion)
+        # Extract VISUAL column for image prompts
+        self.visual_notes = self._extract_visual_column(completion)
 
         return completion
+
+    def _extract_audio_column(self, two_col_script: str) -> str:
+        """Extract only the AUDIO column for TTS."""
+        lines = []
+        for line in two_col_script.strip().split("\n"):
+            line = line.strip()
+            if not line or line.upper().startswith("AUDIO"):
+                continue
+            if "|" in line:
+                audio_part = line.split("|")[0].strip()
+                if audio_part:
+                    lines.append(audio_part)
+            else:
+                # Fallback: plain line without separator
+                lines.append(line)
+        return " ".join(lines)
+
+    def _extract_visual_column(self, two_col_script: str) -> str:
+        """Extract only the VISUAL column for image prompt generation."""
+        lines = []
+        for line in two_col_script.strip().split("\n"):
+            line = line.strip()
+            if not line or line.upper().startswith("AUDIO"):
+                continue
+            if "|" in line:
+                parts = line.split("|")
+                if len(parts) > 1:
+                    visual_part = parts[1].strip()
+                    if visual_part:
+                        lines.append(visual_part)
+        return " | ".join(lines)
 
     def generate_metadata(self) -> dict:
         """
@@ -244,30 +266,24 @@ class YouTube:
         """
         n_prompts = min(8, max(5, len(self.script.split("."))))
 
+        # Use visual column if available, otherwise fall back to script
+        visual_context = getattr(self, "visual_notes", self.script)
+
         prompt = f"""
-        Generate {n_prompts} Image Prompts for AI Image Generation,
-        depending on the subject of a video.
+        Generate {n_prompts} Image Prompts for AI Image Generation
+        for a math education YouTube Shorts video.
+
         Subject: {self.subject}
+        Visual style: {get_image_style()}
 
-        The image prompts are to be returned as
-        a JSON-Array of strings.
+        Use these visual descriptions as inspiration for each image:
+        {visual_context}
 
-        Each search term should consist of a full sentence,
-        always add the main subject of the video.
-
-        Be emotional and use interesting adjectives to make the
-        Image Prompt as detailed as possible.
-
-        YOU MUST ONLY RETURN THE JSON-ARRAY OF STRINGS.
-        YOU MUST NOT RETURN ANYTHING ELSE.
-        YOU MUST NOT RETURN THE SCRIPT.
-
-        The search terms must be related to the subject of the video.
-        Here is an example of a JSON-Array of strings:
-        ["image prompt 1", "image prompt 2", "image prompt 3"]
-
-        For context, here is the full text:
-        {self.script}
+        Rules:
+        - Each prompt describes ONE simple doodle-style illustration
+        - Keep it simple — single scene, minimal elements
+        - Must match the math concept being explained
+        - Return as JSON array of strings only: ["prompt1", "prompt2", ...]
         """
 
         completion = (
@@ -527,7 +543,8 @@ class YouTube:
             from config import get_image_style, get_image_negative_prompt
 
             negative = get_image_negative_prompt()
-
+            style = get_image_style()
+            styled_prompt = f"{prompt}, {style}" if style else prompt
             image = self._flux_pipe(
                 prompt=styled_prompt,
                 negative_prompt=negative if negative else None,
