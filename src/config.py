@@ -449,3 +449,8 @@ def get_image_style() -> str:
 def get_image_negative_prompt() -> str:
     with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
         return json.load(file).get("image_negative_prompt", "")
+
+
+def get_is_always_upload() -> bool:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+        return json.load(file).get("is_always_upload", False)
