@@ -454,3 +454,8 @@ def get_image_negative_prompt() -> str:
 def get_is_always_upload() -> bool:
     with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
         return json.load(file).get("is_always_upload", False)
+
+
+def get_image_duration() -> int:
+    with open(os.path.join(ROOT_DIR, "config.json"), "r") as file:
+        return json.load(file).get("image_duration", 4)

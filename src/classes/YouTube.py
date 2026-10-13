@@ -264,7 +264,17 @@ class YouTube:
         Returns:
             image_prompts (List[str]): Generated List of image prompts.
         """
-        n_prompts = min(8, max(5, len(self.script.split("."))))
+        from config import get_image_duration
+
+        script_duration = 60  # assume 60s video
+        image_duration = get_image_duration()
+        n_prompts = max(1, round(script_duration / image_duration))
+        if get_verbose():
+            info(
+                f" => Image count: {n_prompts} ({image_duration}s each for ~{
+                    script_duration
+                }s video)"
+            )
 
         # Use visual column if available, otherwise fall back to script
         visual_context = getattr(self, "visual_notes", self.script)
@@ -284,6 +294,14 @@ class YouTube:
         - Keep it simple — single scene, minimal elements
         - Must match the math concept being explained
         - Return as JSON array of strings only: ["prompt1", "prompt2", ...]
+
+        CRITICAL RULES FOR EVERY IMAGE PROMPT:
+        - NO text, letters, numbers, words, labels, captions, or equations in the image
+        - NO speech bubbles with text, NO whiteboards with writing, NO signs with words
+        - ONLY pure illustration — people, objects, scenes, diagrams without any text
+        - Describe ONLY what to visually show, not what to write
+        - Good example: "A hand holding three apples, simple doodle style"
+        - Bad example: "Text showing 3+3=6 on a chalkboard"
         """
 
         completion = (
@@ -845,7 +863,9 @@ class YouTube:
         threads = get_threads()
         tts_clip = AudioFileClip(self.tts_path)
         max_duration = tts_clip.duration
-        req_dur = max_duration / len(self.images)
+        from config import get_image_duration
+
+        req_dur = get_image_duration()  # Each image shows for exactly N seconds
 
         # Make a generator that returns a TextClip when called with consecutive
         def generator(txt):
